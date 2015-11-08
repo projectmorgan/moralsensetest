@@ -1,0 +1,202 @@
+<!doctype html>
+<html>
+  <head>
+    <title>MST EXPERIMENT TEMPLATE</title>
+    
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+    <script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js"></script>
+    
+    <!--include the plugins you need here!-->
+    <script src="jsPsych-4.0.1/jspsych.js"></script>
+    <script src="jsPsych-4.0.1/plugins/jspsych-text.js"></script>
+	<script src="jsPsych-4.0.1/plugins/jspsych-single-stim.js"></script>
+	<script src="jsPsych-4.0.1/plugins/jspsych-html.js"></script>
+	<script src="jsPsych-4.0.1/plugins/jspsych-survey-likert.js"></script>
+	
+	<!-- parameters for your study go here-->
+	<script src ="public/js/parameters_STUDYNAME.js"></script>
+	
+    <link href="public/css/jspsych.css" rel="stylesheet" type="text/css"></link>
+    <link href="public/css/jquery-ui.css" rel="stylesheet" type="text/css"></link>
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+	<link rel="icon" href="/favicon.ico" type="image/x-icon">
+  </head>
+<body>
+    <div id="jspsych-target"></div>
+</body>
+
+  <script>  
+  	
+  
+  	/* consent block */
+  	/* this can always stay the same! */
+  	var consentBlock = {
+      type: 'html',
+	  pages: [{url: "consent.html", cont_btn: "start", check_fn: check_consent}]
+    };
+
+    /* instructions block */
+    var instructBlock = {
+      type: 'text',
+      /* cont_key doesn't need to be specified. if you don't specify, the user
+      can press any key to continue */
+	  cont_key: ['1'],
+	  /* these params live in parameters_STUDYNAME.js */
+      text: [welcomeText, instructText]
+    };
+
+
+    /* array for experiment data */
+    var experiment = [];
+    
+    /* instruct */
+    experiment.push(consentBlock);
+    experiment.push(instructBlock);
+	
+	/* use this is you're randomizing order and want the order submitted to SQL */
+	/* note that we're zero-indexed. So, for this study, I have 28 trials...*/
+	var shuffledtrials = shuffle([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27]);
+	
+	/* loop through dilemmas*/
+	/* note that this means i'm doing one question per page! there are ways to put them
+	all on one page. */
+	for(var i=0; i < numTrials; i++){
+
+		
+		/* display dilemma text and ask the question */
+		var questionBlock = {
+			/* this plugin generates a likert slider scale*/
+			type: 'survey-likert',
+			/* i grab the vignette that corresponds to the shuffled order*/
+			questions: [dilemmas[shuffledtrials[i]].case],
+			labels: [[scale]],
+			/* how many ticks on the scale?*/
+			intervals: [[5]],
+			show_ticks: true,
+	
+		};
+
+		experiment.push(questionBlock);
+		
+	}
+	
+	/* this is a debriefing block*/
+	/* INSERT YOUR DEBRIEF HERE*/
+	var debrief_block = {
+  		type: "text",
+  		text: function() {
+    		return "<p>Your average response was <strong>" +
+    		// here the args are (order, number of ticks on scale, number of reverse-coded items)
+   			 getAverageResponse(shuffledtrials,5,9) + "</strong>. Averages closer to 5 indicate blah blah blah.";
+  			}
+	};
+	experiment.push(debrief_block);
+
+	/* this says you can exit the survey now*/
+	var end = {
+		type: 'text',
+		text: [endText]
+	}
+
+	experiment.push(end);
+	
+	
+	/********UTILITIES********/
+	
+	/* export data to SQL db*/
+	/* feed in the data and the randomized order */
+	function saveData(data,shuffledtrials){
+		$.ajax({
+			type:'post',
+			cache: false,
+			url: 'data/saveDataSTUDYNAME.php',
+			data: {
+			order: JSON.stringify(shuffledtrials),
+			table: 'TABLENAME',
+			json: JSON.stringify(data)},
+		}).success(function(val){
+		/* if you want to use output of saveData to communicate data with shiny */
+		//	var w1 = "http://moral.shinyapps.io/MSTgraphics/?curr=empathy&empav=";
+		//	var w2 = w1.concat(getAverageResponse(shuffledtrials));
+		//	window.location = w2.concat(val);
+		/* otherwise, redirect to user page */
+			window.location = "www.moralsensetest.com/user.php";
+		});
+		
+	}
+	
+	
+	
+	/* use this is you want to give user feedback! */
+	function getAverageResponse(shuffledtrials,numTicks,numReverse) {
+
+  		var trials = jsPsych.data.getTrialsOfType('survey-likert');
+  		var sum = 0;
+ 		var valid_trial_count = 0;
+ 		
+  
+  		//look for reverse coded items
+  		//this is UNIQUE to every study!
+  		for (var i = 0; i < trials.length; i++) 
+     	{
+     		var index = 0;
+     		for (var j = 0; j < trials.length; j++) {
+     			if (shuffledtrials[j]==i) {
+     			index = j;
+     			}
+     		}
+
+     		if (index <numReverse) {	
+      			sum += numTicks - parseInt(trials[i].responses[6],10);
+      		}
+      		else {
+      			sum += parseInt(trials[i].responses[6],10);
+      		}
+      		
+      		valid_trial_count++;
+    	}
+  		
+  		//returns user average
+  		return Math.round(sum/ valid_trial_count);
+	}
+	
+	
+
+	/*shuffle function*/
+	function shuffle(array) {
+  		var currIndex = array.length, tempVal, randIndex ;
+
+  		// while elements left to shuffle
+  		while (0 !== currIndex) {
+
+    		// pick one that's left
+    		randIndex = Math.floor(Math.random() * currIndex);
+    		currIndex -= 1;
+
+    		// and swap with curr element
+    		tempVal = array[currIndex];
+    		array[currIndex] = array[randIndex];
+    		array[randIndex] = tempVal;
+  		}
+
+  		return array;
+	}	
+	
+	/******END OF UTILITIES******/
+	
+	/*start the experiment */
+	jsPsych.init({
+
+	 	display_element: $('#jspsych-target'),
+		experiment_structure: experiment,
+		show_progress_bar: true,
+		on_finish: function(){
+			//here, we send all of the data and the shuffled order to the
+			//function which calls the php script.
+			var average = saveData(jsPsych.data.getData(),shuffledtrials);
+
+		}
+	});
+
+  </script>
+</html>
